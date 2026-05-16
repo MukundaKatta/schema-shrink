@@ -1,5 +1,6 @@
 # schema-shrink
 
+[![CI](https://github.com/MukundaKatta/schema-shrink/actions/workflows/ci.yml/badge.svg)](https://github.com/MukundaKatta/schema-shrink/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/schema-shrink.svg)](https://crates.io/crates/schema-shrink)
 [![docs.rs](https://docs.rs/schema-shrink/badge.svg)](https://docs.rs/schema-shrink)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
