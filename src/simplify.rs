@@ -79,15 +79,24 @@ fn walk_obj(mut map: Map<String, Value>, opts: &SimplifyOptions) -> Map<String, 
     // Recurse into nested schema-bearing keys.
     for key in ["properties", "patternProperties", "$defs", "definitions"] {
         if let Some(Value::Object(props)) = map.remove(key) {
-            let new_props: Map<String, Value> = props
-                .into_iter()
-                .map(|(k, v)| (k, walk(v, opts)))
-                .collect();
+            let new_props: Map<String, Value> =
+                props.into_iter().map(|(k, v)| (k, walk(v, opts))).collect();
             map.insert(key.to_string(), Value::Object(new_props));
         }
     }
     if let Some(items) = map.remove("items") {
         map.insert("items".to_string(), walk(items, opts));
+    }
+    // `additionalProperties` is itself a subschema, so recurse into it (when it
+    // is an object). A boolean value is left untouched here; the `false`-drop
+    // handling above already dealt with the only boolean case we rewrite.
+    if let Some(addl) = map.remove("additionalProperties") {
+        let rewritten = if addl.is_object() {
+            walk(addl, opts)
+        } else {
+            addl
+        };
+        map.insert("additionalProperties".to_string(), rewritten);
     }
     for keyword in ["anyOf", "oneOf", "allOf"] {
         if let Some(Value::Array(arr)) = map.remove(keyword) {

@@ -20,7 +20,7 @@ pub enum ExpensiveFeature {
     },
     /// Nesting depth exceeded the analyzer's threshold.
     DeepNesting {
-        /// JSON pointer to the deepest path found.
+        /// JSON pointer to the first node that reached the depth threshold.
         pointer: String,
         /// Depth, counted from the root.
         depth: usize,
@@ -72,7 +72,9 @@ pub fn analyze(schema: &Value) -> Analysis {
 }
 
 fn walk(node: &Value, pointer: &str, depth: usize, a: &mut Analysis) {
-    if depth >= DEEP_NESTING_THRESHOLD {
+    // Flag deep nesting once, at the first node that reaches the threshold,
+    // rather than emitting a duplicate feature for every deeper descendant.
+    if depth == DEEP_NESTING_THRESHOLD {
         a.expensive_features.push(ExpensiveFeature::DeepNesting {
             pointer: pointer.to_string(),
             depth,
@@ -129,9 +131,17 @@ fn walk(node: &Value, pointer: &str, depth: usize, a: &mut Analysis) {
         if let Some(items) = obj.get("items") {
             walk(items, &format!("{pointer}/items"), depth + 1, a);
         }
-        if let Some(addl) = obj.get("additionalProperties").and_then(|v| v.as_object()) {
-            for (k, v) in addl {
-                walk(v, &format!("{pointer}/additionalProperties/{k}"), depth + 1, a);
+        // `additionalProperties` is itself a subschema (object or boolean), not a
+        // map of property-name -> schema, so walk it directly. A boolean value
+        // (e.g. `false`) carries no nested schema to analyze.
+        if let Some(addl) = obj.get("additionalProperties") {
+            if addl.is_object() {
+                walk(
+                    addl,
+                    &format!("{pointer}/additionalProperties"),
+                    depth + 1,
+                    a,
+                );
             }
         }
     }

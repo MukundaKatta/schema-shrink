@@ -34,9 +34,7 @@ fn flags_large_enums() {
 
 #[test]
 fn flags_many_branches_anyof() {
-    let branches: Vec<_> = (0..10)
-        .map(|i| json!({"const": format!("v{i}")}))
-        .collect();
+    let branches: Vec<_> = (0..10).map(|i| json!({"const": format!("v{i}")})).collect();
     let s = json!({"anyOf": branches});
     let a = analyze(&s);
     assert!(a
@@ -64,10 +62,7 @@ fn likely_too_large_above_threshold() {
     // Build a schema with 20 nullable unions to cross the hard limit (16).
     let mut props = serde_json::Map::new();
     for i in 0..20 {
-        props.insert(
-            format!("f{i}"),
-            json!({"type": ["string", "null"]}),
-        );
+        props.insert(format!("f{i}"), json!({"type": ["string", "null"]}));
     }
     let s = json!({"type": "object", "properties": props});
     let a = analyze(&s);
@@ -135,6 +130,59 @@ fn simplify_keeps_additional_properties_false_by_default() {
     let s = json!({"type": "object", "additionalProperties": false});
     let out = simplify(s, SimplifyOptions::default());
     assert_eq!(out["additionalProperties"], false);
+}
+
+#[test]
+fn analyze_walks_additional_properties_subschema() {
+    // `additionalProperties` is itself a subschema (a map value type), not a
+    // map of property-name -> schema. Expensive features inside it must be
+    // discovered.
+    let s = json!({
+        "type": "object",
+        "additionalProperties": {"type": ["string", "null"]}
+    });
+    let a = analyze(&s);
+    assert_eq!(a.nullable_union_count, 1);
+    assert!(a.expensive_features.iter().any(|f| matches!(
+        f,
+        ExpensiveFeature::NullableUnion { pointer } if pointer == "/additionalProperties"
+    )));
+}
+
+#[test]
+fn analyze_ignores_boolean_additional_properties() {
+    let s = json!({"type": "object", "additionalProperties": false});
+    let a = analyze(&s);
+    assert_eq!(a.nullable_union_count, 0);
+    assert!(a.expensive_features.is_empty());
+}
+
+#[test]
+fn deep_nesting_flagged_once_not_per_descendant() {
+    // 7 levels: well past the threshold. Should yield exactly one DeepNesting
+    // feature (at the first node that crosses the threshold), not one per node.
+    let s = json!({
+        "type": "array",
+        "items": {"type": "array", "items": {"type": "array", "items": {"type": "array",
+        "items": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}}}}}
+    });
+    let a = analyze(&s);
+    let deep_count = a
+        .expensive_features
+        .iter()
+        .filter(|f| matches!(f, ExpensiveFeature::DeepNesting { .. }))
+        .count();
+    assert_eq!(deep_count, 1, "expected a single DeepNesting feature");
+}
+
+#[test]
+fn simplify_recurses_into_additional_properties() {
+    let s = json!({
+        "type": "object",
+        "additionalProperties": {"type": ["string", "null"]}
+    });
+    let out = simplify(s, SimplifyOptions::default());
+    assert_eq!(out["additionalProperties"]["type"], "string");
 }
 
 #[test]
