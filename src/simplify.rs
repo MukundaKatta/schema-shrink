@@ -84,8 +84,17 @@ fn walk_obj(mut map: Map<String, Value>, opts: &SimplifyOptions) -> Map<String, 
             map.insert(key.to_string(), Value::Object(new_props));
         }
     }
+    // `items` may be a single subschema or, in draft-07 tuple form, an array of
+    // subschemas. `walk` recurses into either an object or an array, so a single
+    // call handles both shapes.
     if let Some(items) = map.remove("items") {
         map.insert("items".to_string(), walk(items, opts));
+    }
+    // `prefixItems` (JSON Schema 2020-12 tuple validation) is an array of
+    // subschemas; recurse into each.
+    if let Some(Value::Array(arr)) = map.remove("prefixItems") {
+        let new_arr: Vec<Value> = arr.into_iter().map(|v| walk(v, opts)).collect();
+        map.insert("prefixItems".to_string(), Value::Array(new_arr));
     }
     // `additionalProperties` is itself a subschema, so recurse into it (when it
     // is an object). A boolean value is left untouched here; the `false`-drop

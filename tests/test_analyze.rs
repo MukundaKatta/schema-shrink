@@ -196,3 +196,68 @@ fn simplify_recurses_into_anyof() {
     let out = simplify(s, SimplifyOptions::default());
     assert_eq!(out["anyOf"][0]["type"], "string");
 }
+
+#[test]
+fn analyze_walks_tuple_items_array() {
+    // draft-07 tuple form: `items` is an array of subschemas. Expensive
+    // features inside each tuple position must be discovered.
+    let s = json!({
+        "type": "array",
+        "items": [
+            {"type": ["string", "null"]},
+            {"type": "integer"}
+        ]
+    });
+    let a = analyze(&s);
+    assert_eq!(a.nullable_union_count, 1);
+    assert!(a.expensive_features.iter().any(|f| matches!(
+        f,
+        ExpensiveFeature::NullableUnion { pointer } if pointer == "/items/0"
+    )));
+}
+
+#[test]
+fn analyze_walks_prefix_items() {
+    // JSON Schema 2020-12 tuple form: `prefixItems` is an array of subschemas.
+    let s = json!({
+        "type": "array",
+        "prefixItems": [
+            {"type": ["string", "null"]},
+            {"type": "integer"}
+        ]
+    });
+    let a = analyze(&s);
+    assert_eq!(a.nullable_union_count, 1);
+    assert!(a.expensive_features.iter().any(|f| matches!(
+        f,
+        ExpensiveFeature::NullableUnion { pointer } if pointer == "/prefixItems/0"
+    )));
+}
+
+#[test]
+fn simplify_recurses_into_tuple_items_array() {
+    let s = json!({
+        "type": "array",
+        "items": [
+            {"type": ["string", "null"]},
+            {"type": "integer"}
+        ]
+    });
+    let out = simplify(s, SimplifyOptions::default());
+    assert_eq!(out["items"][0]["type"], "string");
+    assert_eq!(out["items"][1]["type"], "integer");
+}
+
+#[test]
+fn simplify_recurses_into_prefix_items() {
+    let s = json!({
+        "type": "array",
+        "prefixItems": [
+            {"type": ["string", "null"]},
+            {"type": "integer"}
+        ]
+    });
+    let out = simplify(s, SimplifyOptions::default());
+    assert_eq!(out["prefixItems"][0]["type"], "string");
+    assert_eq!(out["prefixItems"][1]["type"], "integer");
+}

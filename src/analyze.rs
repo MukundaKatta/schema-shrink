@@ -128,8 +128,24 @@ fn walk(node: &Value, pointer: &str, depth: usize, a: &mut Analysis) {
                 }
             }
         }
+        // `items` is either a single subschema (object) or, in draft-07 tuple
+        // form, an array of subschemas. Handle both; an array of subschemas is
+        // not an object, so it would otherwise be silently skipped by `walk`.
         if let Some(items) = obj.get("items") {
-            walk(items, &format!("{pointer}/items"), depth + 1, a);
+            if let Some(arr) = items.as_array() {
+                for (i, item) in arr.iter().enumerate() {
+                    walk(item, &format!("{pointer}/items/{i}"), depth + 1, a);
+                }
+            } else {
+                walk(items, &format!("{pointer}/items"), depth + 1, a);
+            }
+        }
+        // `prefixItems` (JSON Schema 2020-12 tuple validation) is an array of
+        // subschemas, one per position.
+        if let Some(arr) = obj.get("prefixItems").and_then(|v| v.as_array()) {
+            for (i, item) in arr.iter().enumerate() {
+                walk(item, &format!("{pointer}/prefixItems/{i}"), depth + 1, a);
+            }
         }
         // `additionalProperties` is itself a subschema (object or boolean), not a
         // map of property-name -> schema, so walk it directly. A boolean value
